@@ -39,12 +39,13 @@ def _timed(func):
     ncalls[name] = 0
     def timed_func(*args, **kwargs):
         t0 = perf_counter()
-        func(*args, **kwargs)
+        ret = func(*args, **kwargs)
         # debug(f'call to {func.__name__} took: {(perf_counter() - t0)*1000}')
         elapsed = (perf_counter() - t0)*1000
         cumtime[name] += elapsed
         ncalls[name] += 1
         debug(f'{ncalls[name]} calls to {name} have taken {cumtime[name] : .1f}ms')
+        return ret
     return timed_func
 
 
