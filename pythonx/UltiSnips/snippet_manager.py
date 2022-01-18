@@ -27,6 +27,26 @@ from UltiSnips.text import escape
 from UltiSnips.vim_state import VimState, VisualContentPreserver
 from UltiSnips.buffer_proxy import use_proxy_buffer, suspend_proxy_edits
 
+from UltiSnips.debug import debug
+from time import perf_counter
+
+cumtime = {}
+ncalls = {}
+
+def _timed(func):
+    name = func.__name__
+    cumtime[name] = 0.0
+    ncalls[name] = 0
+    def timed_func(*args, **kwargs):
+        t0 = perf_counter()
+        func(*args, **kwargs)
+        # debug(f'call to {func.__name__} took: {(perf_counter() - t0)*1000}')
+        elapsed = (perf_counter() - t0)*1000
+        cumtime[name] += elapsed
+        ncalls[name] += 1
+        debug(f'{ncalls[name]} calls to {name} have taken {cumtime[name] : .1f}ms')
+    return timed_func
+
 
 def _ask_user(a, formatted):
     """Asks the user using inputlist() and returns the selected element or
@@ -713,6 +733,7 @@ class SnippetManager:
         highest_priority = max(s.priority for s in snippets)
         return [s for s in snippets if s.priority == highest_priority]
 
+    @_timed
     def _do_snippet(self, snippet, before):
         """Expands the given snippet, and handles everything that needs to be
         done with it."""
@@ -789,6 +810,7 @@ class SnippetManager:
         before = vim_helper.buf.line_till_cursor
         return before, self._snips(before, False, autotrigger_only)
 
+    @_timed
     def _try_expand(self, autotrigger_only=False):
         """Try to expand a snippet in the current place."""
         before, snippets = self._can_expand(autotrigger_only)
