@@ -230,3 +230,115 @@ class ContextSnippets_Header_DoNotExpandOnFalse(_VimTest):
     }
     keys = "a" + EX
     wanted = keys
+
+class ContextSnippets_LotsOfGlobals(_VimTest):
+    files = {
+        "us/all.snippets": r"""
+        global !p
+        def check_context():
+            return False
+
+        def math():
+            return vim.api.eval('vimtex#syntax#in_mathzone()')
+
+        def has_text(s):
+            return bool(s) and not s.isspace()
+
+        def check_newline():
+            line = snip.buffer[snip.line]
+            left = has_text(line[:snip.cursor[1]-1])
+            right = has_text(line[snip.cursor[1]:])
+            indent = re.match(r'\s*', line).group(0)
+            return [left, right, indent]
+
+        def comment():
+            return vim.api.eval('vimtex#syntax#in_comment()')
+
+        def env(*names):
+            for name in names:
+                [x,y] = vim.api.eval("vimtex#env#is_inside('" + name + "')")
+                if x and y:
+                    return True
+            return False
+
+        #ATOM = re.compile(r'\\[a-zA-Z]+|\S')
+        #is_atomic = ATOM.fullmatch
+        is_atomic = lambda s: re.fullmatch(r'(\\[a-zA-Z]+|\S)', s)
+
+        LIMIT_COMMANDS = {'\\int', '\\iint', '\\iiint', '\\oint', '\\sum', '\\prod', '\\bigcup',
+        '\\bigcap', '\\bigoplus', '\\bigotimes', '\\big', '\\bigvee', '\\bigwedge', '\\bigodot'}
+
+        #TRANSLATE_TEX_UNICODE = vim.api.eval("exists('b:translate_tex_unicode') && b:translate_tex_unicode")
+        def translate_tex_unicode():
+            return vim.api.eval("exists('b:translate_tex_unicode') && b:translate_tex_unicode")
+
+        def subseteq():
+            return '⊆' if translate_tex_unicode() else '\\subseteq'
+
+        def partial():
+            return '∂' if translate_tex_unicode() else '\\partial'
+
+        def norm():
+            return '∥' if translate_tex_unicode() else '\\|'
+
+        def forall():
+            return '∀' if translate_tex_unicode() else '\\forall'
+        #def exists():
+        #	return '∃' if translate_tex_unicode() else '\\exists'
+
+        def geq():
+            return '≥' if translate_tex_unicode() else '\\geq'
+
+        def leq():
+            return '≤' if translate_tex_unicode() else '\\leq'
+
+        def lesssim():
+            return '≲' if translate_tex_unicode() else '\\lesssim'
+
+        def gtrsim():
+            return '≳' if translate_tex_unicode() else '\\gtrsim'
+
+        def create_table(snip):
+            rows = snip.buffer[snip.line].split('x')[0]
+            cols = snip.buffer[snip.line].split('x')[1]
+
+            int_val = lambda string: int(''.join(s for s in string if s.isdigit()))
+
+            rows = int_val(rows)
+            cols = int_val(cols)
+
+            offset = cols + 1
+            old_spacing = snip.buffer[snip.line][:snip.buffer[snip.line].rfind('\t') + 1]
+
+            snip.buffer[snip.line] = ''
+
+            final_str = old_spacing + "\\begin{tabular}{|" + "|".join(['$' + str(i + 1) for i in range(cols)]) + "|}\n"
+
+            for i in range(rows):
+                final_str += old_spacing + '\t'
+                final_str += " & ".join(['$' + str(i * cols + j + offset) for j in range(cols)])
+
+                final_str += " \\\\\\\n"
+
+            final_str += old_spacing + "\\end{tabular}\n$0"
+
+            snip.expand_anon(final_str)
+
+        def add_row(snip):
+            row_len = int(''.join(s for s in snip.buffer[snip.line] if s.isdigit()))
+            old_spacing = snip.buffer[snip.line][:snip.buffer[snip.line].rfind('\t') + 1]
+
+            snip.buffer[snip.line] = ''
+
+            final_str = old_spacing
+            final_str += " & ".join(['$' + str(j + 1) for j in range(row_len)])
+            final_str += " \\\\\\"
+
+            snip.expand_anon(final_str)
+
+        endglobal
+        """
+    }
+    keys = "a" + EX
+    keys = keys*500
+    wanted = keys
