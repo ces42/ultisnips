@@ -233,7 +233,7 @@ class ContextSnippets_Header_DoNotExpandOnFalse(_VimTest):
 
 class ContextSnippets_LotsOfGlobals(_VimTest):
     files = {
-        "us/all.snippets": r"""
+        "us/all.snippets": r'''
         global !p
         def check_context():
             return False
@@ -337,7 +337,13 @@ class ContextSnippets_LotsOfGlobals(_VimTest):
             snip.expand_anon(final_str)
 
         endglobal
-        """
+
+        context "check_context()"
+        snippet a "desc" e
+        abc
+        endsnippet
+
+        '''
     }
     keys = "a" + EX
     keys = keys*500
