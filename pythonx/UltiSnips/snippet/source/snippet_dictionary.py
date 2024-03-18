@@ -3,6 +3,8 @@
 
 """Implements a container for parsed snippets."""
 
+from UltiSnips.text import escape
+
 
 class SnippetDictionary:
 
@@ -10,12 +12,15 @@ class SnippetDictionary:
 
     def __init__(self):
         self._snippets = []
+        self._auto_snippets = []
         self._cleared = {}
         self._clear_priority = float("-inf")
 
     def add_snippet(self, snippet):
         """Add 'snippet' to this dictionary."""
         self._snippets.append(snippet)
+        if snippet.has_option('A'):
+            self._auto_snippets.append(snippet)
 
     def get_matching_snippets(
         self, trigger, potentially, autotrigger_only, visual_content
@@ -32,9 +37,10 @@ class SnippetDictionary:
         made in insert mode.
 
         """
-        all_snippets = self._snippets
         if autotrigger_only:
-            all_snippets = [s for s in all_snippets if s.has_option("A")]
+            all_snippets = self._auto_snippets
+        else:
+            all_snippets = self._snippets
 
         if not potentially:
             return [s for s in all_snippets if s.matches(trigger, visual_content)]
@@ -49,8 +55,9 @@ class SnippetDictionary:
 
         """
         if not triggers:
-            if self._clear_priority is None or priority > self._clear_priority:
-                self._clear_priority = priority
+            # if self._clear_priority is None or priority > self._clear_priority:
+            #     self._clear_priority = priority
+            self._clear_priority = max(priority, self._clear_priority)
         else:
             for trigger in triggers:
                 if trigger not in self._cleared or priority > self._cleared[trigger]:

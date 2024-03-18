@@ -26,8 +26,9 @@ class SnippetSource:
 
     def _get_existing_deep_extends(self, base_filetypes):
         """Helper for get all existing filetypes extended by base filetypes."""
-        deep_extends = self.get_deep_extends(base_filetypes)
-        return [ft for ft in deep_extends if ft in self._snippets]
+        # deep_extends = self.get_deep_extends(base_filetypes)
+        # return [ft for ft in deep_extends if ft in self._snippets]
+        return self.get_deep_extends(base_filetypes) & self._snippets.keys()
 
     def get_snippets(
         self, filetypes, before, possible, autotrigger_only, visual_content
@@ -88,10 +89,10 @@ class SnippetSource:
 
         """
         seen = set(base_filetypes)
-        todo_fts = list(set(base_filetypes))
+        todo_fts = set(base_filetypes)
         while todo_fts:
             todo_ft = todo_fts.pop()
-            unseen_extends = set(ft for ft in self._extends[todo_ft] if ft not in seen)
+            unseen_extends = self._extends[todo_ft] - seen
             seen.update(unseen_extends)
-            todo_fts.extend(unseen_extends)
+            todo_fts.update(unseen_extends)
         return seen

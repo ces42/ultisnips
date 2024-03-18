@@ -180,10 +180,61 @@ function! UltiSnips#LeavingInsertMode() abort
 endfunction
 
 function! UltiSnips#TrackChange() abort
-    py3 UltiSnips_Manager._track_change()
+    if exists('b:_ultisnips_char_inserted') && col('.') > 1
+        unlet b:_ultisnips_char_inserted
+        py3 UltiSnips_Manager._track_change(autotrigger=True)
+    else
+        py3 UltiSnips_Manager._track_change(autotrigger=False)
+    endif
+endfunction
+
+function! UltiSnips#InsertCharPre() abort
+    let b:_ultisnips_char_inserted = 1
 endfunction
 
 function! UltiSnips#RefreshSnippets() abort
     py3 UltiSnips_Manager._refresh_snippets()
 endfunction
 " }}}
+
+
+function! UltiSnips#SetupInnerState(fwd_key, bwd_key) abort
+    if a:fwd_key != "None"
+        exe "inoremap <buffer><nowait><silent> " .. a:fwd_key .. " <C-R>=UltiSnips#JumpForwards()<cr>"
+        exe "snoremap <buffer><nowait><silent> " .. a:fwd_key .. " <Esc>:call UltiSnips#JumpForwards()<cr>"
+    endif
+    exe "inoremap <buffer><nowait><silent> " .. a:bwd_key .. " <C-R>=UltiSnips#JumpBackwards()<cr>"
+    exe "snoremap <buffer><nowait><silent> " .. a:bwd_key .. " <Esc>:call UltiSnips#JumpBackwards()<cr>"
+
+    " Setup the autogroups.
+    augroup UltiSnips
+        autocmd!
+        autocmd CursorMovedI * call UltiSnips#CursorMoved()
+        autocmd CursorMoved * call UltiSnips#CursorMoved()
+
+        autocmd InsertLeave * call UltiSnips#LeavingInsertMode()
+
+        autocmd BufEnter * call UltiSnips#LeavingBuffer()
+        autocmd CmdwinEnter * call UltiSnips#LeavingBuffer()
+        autocmd CmdwinLeave * call UltiSnips#LeavingBuffer()
+
+        " Also exit the snippet when we enter a unite complete buffer.
+        autocmd Filetype unite call UltiSnips#LeavingBuffer()
+    augroup END
+
+    silent doautocmd <nomodeline> User UltiSnipsEnterFirstSnippet
+endfunction
+
+function! UltiSnips#TeardownInnerState(fwd_key, bwd_key) abort
+    if a:fwd_key != "None"
+        exe "iunmap <buffer> " .. a:fwd_key
+        exe "sunmap <buffer> " .. a:fwd_key
+    endif
+    exe "iunmap <buffer> " .. a:bwd_key
+    exe "sunmap <buffer> " .. a:bwd_key
+
+    silent doautocmd <nomodeline> User UltiSnipsExitLastSnippet
+    augroup UltiSnips
+        autocmd!
+    augroup END
+endfunction

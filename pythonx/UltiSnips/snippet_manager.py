@@ -30,6 +30,7 @@ from UltiSnips.text import escape
 from UltiSnips.vim_state import VimState, VisualContentPreserver
 from UltiSnips.buffer_proxy import use_proxy_buffer, suspend_proxy_edits
 
+INF = float('inf')
 
 def _ask_user(a, formatted):
     """Asks the user using inputlist() and returns the selected element or
@@ -134,11 +135,9 @@ class SnippetManager:
         self._snip_expanded_in_action = False
         self._inside_action = False
 
-        self._last_change = ("", Position(-1, -1))
+        self._added_snippets_source = None
 
-        self._added_snippets_source = AddedSnippetsSource()
         self.register_snippet_source("ultisnips_files", UltiSnipsFileSource())
-        self.register_snippet_source("added", self._added_snippets_source)
 
         enable_snipmate = "1"
         if vim_helper.eval("exists('g:UltiSnipsEnableSnipMate')") == "1":
@@ -296,6 +295,9 @@ class SnippetManager:
         actions=None,
     ):
         """Add a snippet to the list of known snippets of the given 'ft'."""
+        if self._added_snippets_source is None:
+            self._added_snippets_source = AddedSnippetsSource()
+            self.register_snippet_source("added", self._added_snippets_source)
         self._added_snippets_source.add_snippet(
             ft,
             UltiSnipsSnippetDefinition(
@@ -446,47 +448,17 @@ class SnippetManager:
         snippet is active."""
         if self._inner_state_up:
             return
-        if self.expand_trigger != self.forward_trigger:
-            vim_helper.command(
-                "inoremap <buffer><nowait><silent> "
-                + self.forward_trigger
-                + " <C-R>=UltiSnips#JumpForwards()<cr>"
+
+        if self.forward_trigger != self.expand_trigger:
+            fwd_key = self.forward_trigger
+        else:
+            fwd_key = "None"
+
+        vim_helper.command(
+            "call UltiSnips#SetupInnerState({}, {})".format(
+                vim_helper.escape(fwd_key),
+                vim_helper.escape(self.backward_trigger)
             )
-            vim_helper.command(
-                "snoremap <buffer><nowait><silent> "
-                + self.forward_trigger
-                + " <Esc>:call UltiSnips#JumpForwards()<cr>"
-            )
-        vim_helper.command(
-            "inoremap <buffer><nowait><silent> "
-            + self.backward_trigger
-            + " <C-R>=UltiSnips#JumpBackwards()<cr>"
-        )
-        vim_helper.command(
-            "snoremap <buffer><nowait><silent> "
-            + self.backward_trigger
-            + " <Esc>:call UltiSnips#JumpBackwards()<cr>"
-        )
-
-        # Setup the autogroups.
-        vim_helper.command("augroup UltiSnips")
-        vim_helper.command("autocmd!")
-        vim_helper.command("autocmd CursorMovedI * call UltiSnips#CursorMoved()")
-        vim_helper.command("autocmd CursorMoved * call UltiSnips#CursorMoved()")
-
-        vim_helper.command("autocmd InsertLeave * call UltiSnips#LeavingInsertMode()")
-
-        vim_helper.command("autocmd BufEnter * call UltiSnips#LeavingBuffer()")
-        vim_helper.command("autocmd CmdwinEnter * call UltiSnips#LeavingBuffer()")
-        vim_helper.command("autocmd CmdwinLeave * call UltiSnips#LeavingBuffer()")
-
-        # Also exit the snippet when we enter a unite complete buffer.
-        vim_helper.command("autocmd Filetype unite call UltiSnips#LeavingBuffer()")
-
-        vim_helper.command("augroup END")
-
-        vim_helper.command(
-            "silent doautocmd <nomodeline> User UltiSnipsEnterFirstSnippet"
         )
         self._inner_state_up = True
 
@@ -495,17 +467,17 @@ class SnippetManager:
         if not self._inner_state_up:
             return
         try:
+            if self.forward_trigger != self.expand_trigger:
+                fwd_key = self.forward_trigger
+            else:
+                fwd_key = "None"
+
             vim_helper.command(
-                "silent doautocmd <nomodeline> User UltiSnipsExitLastSnippet"
+                "call UltiSnips#TeardownInnerState({}, {})".format(
+                    vim_helper.escape(fwd_key),
+                    vim_helper.escape(self.backward_trigger)
+                )
             )
-            if self.expand_trigger != self.forward_trigger:
-                vim_helper.command("iunmap <buffer> %s" % self.forward_trigger)
-                vim_helper.command("sunmap <buffer> %s" % self.forward_trigger)
-            vim_helper.command("iunmap <buffer> %s" % self.backward_trigger)
-            vim_helper.command("sunmap <buffer> %s" % self.backward_trigger)
-            vim_helper.command("augroup UltiSnips")
-            vim_helper.command("autocmd!")
-            vim_helper.command("augroup END")
         except vim_helper.error:
             # This happens when a preview window was opened. This issues
             # CursorMoved, but not BufLeave. We have no way to unmap, until we
@@ -689,9 +661,12 @@ class SnippetManager:
         If partial is True, then get also return partial matches.
 
         """
+
+        import time
+        t = time.time()
         filetypes = self.get_buffer_filetypes()[::-1]
         matching_snippets = defaultdict(list)
-        clear_priority = None
+        clear_priority = -INF
         cleared = {}
         for _, source in self._snippet_sources:
             source.ensure(filetypes)
@@ -699,9 +674,7 @@ class SnippetManager:
         # Collect cleared information from sources.
         for _, source in self._snippet_sources:
             sclear_priority = source.get_clear_priority(filetypes)
-            if sclear_priority is not None and (
-                clear_priority is None or sclear_priority > clear_priority
-            ):
+            if sclear_priority is not None and (sclear_priority > clear_priority):
                 clear_priority = sclear_priority
             for key, value in source.get_cleared(filetypes).items():
                 if key not in cleared or value > cleared[key]:
@@ -718,6 +691,10 @@ class SnippetManager:
                     or snippet.priority > cleared[snippet.trigger]
                 ):
                     matching_snippets[snippet.trigger].append(snippet)
+
+        t = time.time() - t
+        vim.command(f'let b:_t = exists("b:_t") ? b:_t : []')
+        vim.command(f'let b:_t += [{t}]')
         if not matching_snippets:
             return []
 
@@ -940,29 +917,11 @@ class SnippetManager:
             self._inside_action = old_flag
 
     @err_to_scratch_buffer.wrap
-    def _track_change(self):
+    def _track_change(self, autotrigger):
         self._should_update_textobjects = True
 
-        try:
-            inserted_char = vim_helper.eval("v:char")
-        except UnicodeDecodeError:
-            return
-
-        if isinstance(inserted_char, bytes):
-            return
-
-        try:
-            if inserted_char == "":
-                before = vim_helper.buf.line_till_cursor
-
-                if (
-                    before
-                    and self._last_change[0] != ""
-                    and before[-1] == self._last_change[0]
-                ):
-                    self._try_expand(autotrigger_only=True)
-        finally:
-            self._last_change = (inserted_char, vim_helper.buf.cursor)
+        if autotrigger:
+            self._try_expand(autotrigger_only=True)
 
         if self._should_reset_visual and self._visual_content.mode == "":
             self._visual_content.reset()

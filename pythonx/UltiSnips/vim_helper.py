@@ -87,31 +87,24 @@ def save_mark(name):
             set_mark_from_pos(name, old_pos)
 
 
-def escape(inp):
+def escape(obj):
     """Creates a vim-friendly string from a group of
     dicts, lists and strings."""
-
-    def conv(obj):
-        """Convert obj."""
-        if isinstance(obj, list):
-            rv = "[" + ",".join(conv(o) for o in obj) + "]"
-        elif isinstance(obj, dict):
-            rv = (
-                "{"
-                + ",".join(
-                    [
-                        "%s:%s" % (conv(key), conv(value))
-                        for key, value in obj.iteritems()
-                    ]
-                )
-                + "}"
+    if isinstance(obj, list):
+        return "[" + ",".join(escape(o) for o in obj) + "]"
+    elif isinstance(obj, dict):
+        return (
+            "{"
+            + ",".join(
+                [
+                    "%s:%s" % (escape(key), escape(value))
+                    for key, value in obj.iteritems()
+                ]
             )
-        else:
-            rv = '"%s"' % obj.replace('"', '\\"')
-        return rv
-
-    return conv(inp)
-
+            + "}"
+        )
+    else:
+        return '"%s"' % obj.replace('"', '\\"')
 
 def command(cmd):
     """Wraps vim.command."""

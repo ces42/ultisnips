@@ -34,14 +34,34 @@ command! -bang -nargs=? -complete=customlist,UltiSnips#FileTypeComplete UltiSnip
 
 command! -nargs=1 UltiSnipsAddFiletypes :call UltiSnips#AddFiletypes(<q-args>)
 
-augroup UltiSnips_AutoTrigger
-    au!
-    au InsertCharPre * call UltiSnips#TrackChange()
-    au TextChangedI * call UltiSnips#TrackChange()
-    if exists('##TextChangedP')
-        au TextChangedP * call UltiSnips#TrackChange()
+function! s:define_autotrigger()
+    augroup UltiSnips_AutoTrigger
+        au!
+        au InsertCharPre * call UltiSnips#InsertCharPre()
+        au TextChangedI * call UltiSnips#TrackChange()
+        if exists('##TextChangedP')
+            au TextChangedP * call UltiSnips#TrackChange()
+        endif
+    augroup END
+endfunction
+
+function! UltiSnips#EnableAutotrigger() abort
+    call s:define_autotrigger()
+endfunction
+
+function! UltiSnips#DisableAutotrigger() abort
+    au! UltiSnips_AutoTrigger
+endfunction
+
+function! UltiSnips#ToggleAutotrigger() abort
+    if exists('#UltiSnips_AutoTrigger#TextChangedI')
+        call UltiSnips#DisableAutotrigger()
+    else
+        call UltiSnips#EnableAutotrigger()
     endif
-augroup END
+endfunction
+
+call s:define_autotrigger()
 
 call UltiSnips#map_keys#MapKeys()
 

@@ -4,6 +4,12 @@
 """Snippet representation after parsing."""
 
 import re
+try:
+    import regex
+    compile_trigger = lambda expr: regex.compile(expr, flags=regex.REVERSE)
+except ImportError:
+    regex = False
+    compile_trigger = lambda expr: re.compile(expr)
 
 import vim
 import textwrap
@@ -17,7 +23,10 @@ from UltiSnips.text_objects import SnippetInstance
 from UltiSnips.text_objects.python_code import SnippetUtilForAction, cached_compile
 
 
-__WHITESPACE_SPLIT = re.compile(r"\s")
+_WHITESPACE = re.compile(r"\s")
+_INDENT = re.compile(r"^[ \t]*")
+_TABS = re.compile(r"^\t*")
+
 
 
 class _SnippetUtilCursor:
@@ -55,7 +64,7 @@ class _SnippetUtilCursor:
 
 def split_at_whitespace(string):
     """Like string.split(), but keeps empty words as empty words."""
-    return re.split(__WHITESPACE_SPLIT, string)
+    return _WHITESPACE.split(string)
 
 
 def _words_for_line(trigger, before, num_words=None):
@@ -82,9 +91,6 @@ class SnippetDefinition:
 
     """Represents a snippet as parsed from a file."""
 
-    _INDENT = re.compile(r"^[ \t]*")
-    _TABS = re.compile(r"^\t*")
-
     def __init__(
         self,
         priority,
@@ -107,6 +113,12 @@ class SnippetDefinition:
         self._globals = globals
         self._compiled_globals = None
         self._location = location
+
+        if "r" in self._opts:
+            trigger_re = self._trigger + "$"
+            self._re = self._base_re = compile_trigger(trigger_re)
+            if "b" in self._opts:
+                self._re = compile_trigger("^[ \t]*" + trigger_re)
 
         # Make sure that we actually match our trigger in case we are
         # immediately expanded. At this point we don't take into
@@ -140,14 +152,19 @@ class SnippetDefinition:
         If so, set _last_re and _matched.
 
         """
-        for match in re.finditer(self._trigger, trigger):
-            if match.end() != len(trigger):
-                continue
-            else:
-                self._matched = trigger[match.start() : match.end()]
-
+        match = self._re.search(trigger)
+        if match:
+            self._matched = match.group(0)
             self._last_re = match
-            return match
+            if "b" in self._opts:
+                # self._re matched the whole line, including the whitespace at the
+                # beginning, but it's only supposed to match the trigger so we fix
+                # this here
+                match = self._base_re.search(trigger)
+                self._matched = match.group(0)
+                self._last_re = match
+            return True
+
         return False
 
     def _context_match(self, visual_content, before):
@@ -327,47 +344,49 @@ class SnippetDefinition:
         # boundary).
         self._matched = ""
 
-        words = _words_for_line(self._trigger, before)
 
         if "r" in self._opts:
             try:
-                match = self._re_match(before)
+                if not self._re_match(before):
+                    return False
             except Exception as e:
                 self._make_debug_exception(e)
                 raise
-
-        elif "w" in self._opts:
-            words_len = len(self._trigger)
-            words_prefix = words[:-words_len]
-            words_suffix = words[-words_len:]
-            match = words_suffix == self._trigger
-            if match and words_prefix:
-                # Require a word boundary between prefix and suffix.
-                boundary_chars = escape(words_prefix[-1:] + words_suffix[:1], r"\"")
-                match = vim_helper.eval('"%s" =~# "\\\\v.<."' % boundary_chars) != "0"
-        elif "i" in self._opts:
-            match = words.endswith(self._trigger)
         else:
-            match = words == self._trigger
-
-        # By default, we match the whole trigger
-        if match and not self._matched:
-            self._matched = self._trigger
-
-        # Ensure the match was on a word boundry if needed
-        if "b" in self._opts and match:
-            text_before = before.rstrip()[: -len(self._matched)]
-            if text_before.strip(" \t") != "":
-                self._matched = ""
+            if not before.endswith(self._trigger):
                 return False
 
+            if "i" not in self._opts:
+                trigger_len = len(self._trigger)
+                if trigger_len < len(before):
+                    if "w" in self._opts:
+                        # Require a word boundary between prefix and suffix.
+                        # the "... or None" bit takes care of the case trigger_len == 1
+                        bdry = before[-trigger_len - 1 : -trigger_len + 1 or None]
+                        boundary_chars = escape(bdry, r"\"")
+                        if vim_helper.eval(r'"%s" =~# "\\v.<."' % boundary_chars) == "0":
+                            return False
+                    else:
+                        if before[-trigger_len - 1] not in " \t":
+                            return False
+
+            # By default, we match the whole trigger
+            self._matched = self._trigger
+
+            # Ensure the match was at the beginnig of a line if needed
+            if "b" in self._opts:
+                text_before = before.rstrip()[: -len(self._matched)]
+                if text_before.strip(" \t") != "":
+                    self._matched = ""
+                    return False
+
         self._context = None
-        if match and self._context_code:
+        if self._context_code:
             self._context = self._context_match(visual_content, before)
             if not self.context:
-                match = False
+                return False
 
-        return match
+        return True
 
     def could_match(self, before):
         """Return True if this snippet could match the (partial) 'before'."""
@@ -494,7 +513,7 @@ class SnippetDefinition:
         'Parent' is the parent snippet instance if any.
 
         """
-        indent = self._INDENT.match(text_before).group(0)
+        indent = _INDENT.match(text_before).group(0)
         lines = (self._value + "\n").splitlines()
         ind_util = IndentUtil()
 
@@ -504,7 +523,7 @@ class SnippetDefinition:
             if "t" in self._opts:
                 tabs = 0
             else:
-                tabs = len(self._TABS.match(line).group(0))
+                tabs = len(_TABS.match(line).group(0))
             line_ind = ind_util.ntabs_to_proper_indent(tabs)
             if line_num != 0:
                 line_ind = indent + line_ind
