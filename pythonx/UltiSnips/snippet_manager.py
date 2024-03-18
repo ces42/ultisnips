@@ -131,19 +131,26 @@ class SnippetManager:
         self._visual_content = VisualContentPreserver()
 
         self._snippet_sources = []
+        self._filetypes = []
 
         self._snip_expanded_in_action = False
         self._inside_action = False
 
-        self._added_snippets_source = None
+        self._last_change = ("", Position(-1, -1))
 
+        self._added_snippets_source = AddedSnippetsSource()
         self.register_snippet_source("ultisnips_files", UltiSnipsFileSource())
+        self.register_snippet_source("added", self._added_snippets_source)
 
         enable_snipmate = "1"
         if vim_helper.eval("exists('g:UltiSnipsEnableSnipMate')") == "1":
             enable_snipmate = vim_helper.eval("g:UltiSnipsEnableSnipMate")
         if enable_snipmate == "1":
             self.register_snippet_source("snipmate_files", SnipMateFileSource())
+
+        self._autotrigger = True
+        if vim_helper.eval("exists('g:UltiSnipsAutoTrigger')") == "1":
+            self._autotrigger = vim_helper.eval("g:UltiSnipsAutoTrigger") == "1"
 
         self._should_update_textobjects = False
         self._should_reset_visual = False
@@ -661,9 +668,6 @@ class SnippetManager:
         If partial is True, then get also return partial matches.
 
         """
-
-        import time
-        t = time.time()
         filetypes = self.get_buffer_filetypes()[::-1]
         matching_snippets = defaultdict(list)
         clear_priority = -INF
@@ -691,10 +695,6 @@ class SnippetManager:
                     or snippet.priority > cleared[snippet.trigger]
                 ):
                     matching_snippets[snippet.trigger].append(snippet)
-
-        t = time.time() - t
-        vim.command(f'let b:_t = exists("b:_t") ? b:_t : []')
-        vim.command(f'let b:_t += [{t}]')
         if not matching_snippets:
             return []
 
@@ -829,6 +829,10 @@ class SnippetManager:
     def can_jump_backwards(self):
         return self.can_jump(JumpDirection.BACKWARD)
 
+    def _toggle_autotrigger(self):
+        self._autotrigger = not self._autotrigger
+        return self._autotrigger
+
     @property
     def _current_snippet(self):
         """The current snippet or None."""
@@ -932,6 +936,15 @@ class SnippetManager:
     def _refresh_snippets(self):
         for _, source in self._snippet_sources:
             source.refresh()
+
+
+    @err_to_scratch_buffer.wrap
+    def _check_filetype(self, ft):
+        """Ensure snippets are loaded for the current filetype."""
+        if ft not in self._filetypes:
+            self._filetypes.append(ft)
+            for _, source in self._snippet_sources:
+                source.must_ensure = True
 
 
 UltiSnips_Manager = SnippetManager(  # pylint:disable=invalid-name
