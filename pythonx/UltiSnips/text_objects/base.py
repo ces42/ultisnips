@@ -6,6 +6,8 @@
 from UltiSnips import vim_helper
 from UltiSnips.position import Position
 
+from typing import List
+
 
 def _calc_end(text, start):
     """Calculate the end position of the 'text' starting at 'start."""
@@ -138,7 +140,7 @@ class TextObject:
 
         """
         # We explicitly do not want to move our children around here as we
-        # either have non or we are replacing text initially which means we do
+        # either have none or we are replacing text initially which means we do
         # not want to mess with their positions
         if self.current_text == gtext:
             return
@@ -168,14 +170,14 @@ class EditableTextObject(TextObject):
 
     def __init__(self, *args, **kwargs):
         TextObject.__init__(self, *args, **kwargs)
-        self._children = []
+        self._children: List[TextObject] = []
         self._tabstops = {}
 
     ##############
     # Properties #
     ##############
     @property
-    def children(self):
+    def children(self) -> List[TextObject]:
         """List of all children."""
         return self._children
 

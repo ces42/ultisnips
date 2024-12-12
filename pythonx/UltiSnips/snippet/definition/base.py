@@ -94,13 +94,13 @@ class SnippetDefinition:
     def __init__(
         self,
         priority,
-        trigger,
+        trigger: str,
         value,
-        description,
-        options,
+        description: str,
+        options: str,
         globals,
         location,
-        context,
+        context: str|None,
         actions,
     ):
         self._priority = int(priority)
@@ -123,7 +123,7 @@ class SnippetDefinition:
         # Make sure that we actually match our trigger in case we are
         # immediately expanded. At this point we don't take into
         # account a any context code
-        self._context_code = None
+        self._context_code: str|None = None
         self.matches(self._trigger)
 
         self._context_code = context
@@ -441,9 +441,13 @@ class SnippetDefinition:
         objects alive inside of Vim."""
         raise NotImplementedError()
 
-    def do_pre_expand(self, visual_content, snippets_stack):
+    def do_pre_expand(self, visual_content, snippets_stack, before):
         if "pre_expand" in self._actions:
-            locals = {"buffer": vim_helper.buf, "visual_content": visual_content}
+            locals = {
+                "buffer": vim_helper.buf,
+                "visual_content": visual_content,
+                "before": before
+            }
 
             snip = self._execute_action(
                 self._actions["pre_expand"],

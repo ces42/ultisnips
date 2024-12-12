@@ -732,7 +732,7 @@ class SnippetManager:
         with use_proxy_buffer(self._active_snippets, self._vstate):
             with self._action_context():
                 cursor_set_in_action = snippet.do_pre_expand(
-                    self._visual_content.text, self._active_snippets
+                    self._visual_content.text, self._active_snippets, text_before
                 )
 
         if cursor_set_in_action:
